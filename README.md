@@ -69,6 +69,7 @@ npm run ios
 Upload the provided ESP32 code (AsyncWebServer + WiFi + DHT11) to your ESP32 board.
 
 Ensure your React Native app uses the ESP32's IP address inside API service files.
+Code for ESP32 devkit available in arduino folder within home automation
 
 ---
 
