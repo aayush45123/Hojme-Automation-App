@@ -78,8 +78,8 @@ Ensure your React Native app uses the ESP32's IP address inside API service file
 ---
 
 ## ✨ Author
-**GAMING WITH PRO GAMER (Krish)**  
-React Native Developer | IoT Enthusiast
+**Aayush Bharda**  
+IoT Enthusiast
 
 ---
 
