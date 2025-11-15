@@ -1,98 +1,235 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+export default function App() {
+  const [light, setLight] = useState(false);
+  const [fan, setFan] = useState(false);
+  const [door, setDoor] = useState(false);
 
-export default function HomeScreen() {
+  const [loading, setLoading] = useState(false);
+  const [temperature, setTemperature] = useState("--");
+  const [humidity, setHumidity] = useState("--");
+  const [motion, setMotion] = useState(false);
+
+  // ✅ UPDATE THIS WITH YOUR ESP32 IP
+  const ESP_IP = "http://10.120.24.170";
+
+  // ✅ Fetch DHT Sensor Data
+  const fetchDHT = async () => {
+    try {
+      const res = await fetch(`${ESP_IP}/dht`);
+      const data = await res.json();
+
+      if (data.temp !== null && data.hum !== null) {
+        setTemperature(data.temp);
+        setHumidity(data.hum);
+      }
+    } catch (err) {
+      console.log("DHT Fetch Error:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchDHT();
+    const interval = setInterval(fetchDHT, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ✅ WebSocket for REAL-TIME motion & device states
+  useEffect(() => {
+    const ws = new WebSocket("ws://10.120.24.170/ws"); // ✅ UPDATED
+
+    ws.onopen = () => {
+      console.log("✅ WebSocket Connected");
+    };
+
+    ws.onmessage = (msg) => {
+      try {
+        const data = JSON.parse(msg.data);
+
+        if (data.motion === true) {
+          setMotion(true);
+
+          Alert.alert(
+            "⚠️ Motion Detected!",
+            "Someone entered the room.\nTurn ON the light?",
+            [
+              {
+                text: "Yes",
+                onPress: () => {
+                  setLight(true);
+                  toggleDevice("light", true);
+                },
+              },
+              { text: "No", style: "cancel" },
+            ]
+          );
+        }
+
+        if (data.light !== undefined) setLight(data.light);
+        if (data.fan !== undefined) setFan(data.fan);
+        if (data.door !== undefined) setDoor(data.door);
+
+        if (data.temp !== undefined) setTemperature(data.temp);
+        if (data.hum !== undefined) setHumidity(data.hum);
+
+      } catch (e) {
+        console.log("WS Parse Error:", e);
+      }
+    };
+
+    ws.onerror = (err) => console.log("WS Error:", err);
+    ws.onclose = () => console.log("❌ WebSocket Closed");
+
+    return () => ws.close();
+  }, []);
+
+  // ================== Device Control =====================
+  const toggleDevice = async (device, state) => {
+    setLoading(true);
+
+    try {
+      await fetch(`${ESP_IP}/${device}/${state ? "on" : "off"}`);
+    } catch (err) {
+      Alert.alert("Error", "ESP32 not reachable.");
+    }
+
+    setLoading(false);
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <View style={styles.container}>
+      <Text style={styles.title}>🏠 Smart Home Control</Text>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      {loading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#007AFF" />
+          <Text style={styles.loadingText}>Communicating…</Text>
+        </View>
+      )}
+
+      <View style={styles.sensorCard}>
+        <Text style={styles.sensorTitle}>🌡️ Environment</Text>
+        <Text style={styles.sensorValue}>Temperature: {temperature}°C</Text>
+        <Text style={styles.sensorValue}>Humidity: {humidity}%</Text>
+        <Text style={styles.sensorValue}>
+          Motion: {motion ? "✅ Detected" : "❌ None"}
+        </Text>
+      </View>
+
+      <DeviceButton
+        name="💡 Light"
+        active={light}
+        onPress={() => {
+          const next = !light;
+          setLight(next);
+          toggleDevice("light", next);
+        }}
+      />
+
+      <DeviceButton
+        name="🌀 Fan"
+        active={fan}
+        onPress={() => {
+          const next = !fan;
+          setFan(next);
+          toggleDevice("fan", next);
+        }}
+      />
+
+      <DeviceButton
+        name="🚪 Door"
+        active={door}
+        onPress={() => {
+          const next = !door;
+          setDoor(next);
+          toggleDevice("door", next);
+        }}
+      />
+    </View>
   );
 }
 
+function DeviceButton({ name, active, onPress }) {
+  return (
+    <View style={styles.deviceContainer}>
+      <Text style={styles.device}>{name}</Text>
+      <TouchableOpacity
+        style={[styles.button, active ? styles.buttonOn : styles.buttonOff]}
+        onPress={onPress}
+      >
+        <Text style={styles.btnText}>{active ? "ON" : "OFF"}</Text>
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// ================= STYLES ===================
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f1f5f9",
+    padding: 20,
   },
-  stepContainer: {
-    gap: 8,
+  title: {
+    fontSize: 26,
+    fontWeight: "bold",
+    marginBottom: 15,
+  },
+  sensorCard: {
+    width: "90%",
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 25,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    elevation: 3,
+  },
+  sensorTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
     marginBottom: 8,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  sensorValue: {
+    fontSize: 18,
+    marginBottom: 5,
+  },
+  deviceContainer: {
+    flexDirection: "row",
+    marginVertical: 12,
+    alignItems: "center",
+  },
+  device: {
+    width: 100,
+    fontSize: 20,
+  },
+  button: {
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 8,
+  },
+  buttonOn: { backgroundColor: "#4CAF50" },
+  buttonOff: { backgroundColor: "#FF5252" },
+  btnText: { fontSize: 18, color: "#fff", fontWeight: "bold" },
+  loadingOverlay: {
+    position: "absolute",
+    top: "40%",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: "#007AFF",
+    fontWeight: "600",
   },
 });
